@@ -116,4 +116,4 @@ if __name__ == '__main__':
         print(noticia)
 else:
     scrap_noticias()
-    schedule.every(15).seconds.do(retrieve_partidos)
+    schedule.every(2).hours.do(retrieve_partidos)
