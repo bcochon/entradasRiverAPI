@@ -1,78 +1,63 @@
 import requests
+import schedule
 from bs4 import BeautifulSoup
 from datetime import datetime
 from utils import merge_lists, get_date, format_date
 
 RIVER_URL = 'https://www.cariverplate.com.ar/'
-
-class Entradas:
-    def __init__(self, noticia):
-        self.noticia = noticia
-        self.date = self.find_date(noticia.url)
-
-    def find_date(self, url):
-        return None
-
-class Partido:
-    def __init__(self, vs: str, torneo: str, date: str):
-        self.vs = vs
-        self.torneo = torneo
-        self.date = format_date(date)
-
-    def __str__(self):
-        return f'{self.date.strftime('%c')} - {self.vs} ({self.torneo})'
-
-    def coincide(self, title: str, date: datetime):
-        return self.vs.lower() in title.lower() and self.date.day == date.day and self.date.month == date.month
-    
-    def set_entradas(self, noticia):
-        self.entradas = Entradas(noticia)
-
-class Noticia:
-    def __init__(self, title: str, description: str, url: str):
-        self.title = title
-        self.description = description
-        self.url = url
-        self.partido = self.fetch_partido()
-
-    def __str__(self):
-        return f'{self.title}\n{self.url}\n{self.description}\n{self.partido}'
-    
-    def fetch_partido(self):
-        if 'venta de entradas' not in self.title.lower():
-            return None
-        self.entradas = Entradas(self)
-        partidos = get_partidos()
-        for partido in partidos:
-            if partido.coincide(self.title, get_date(self.description)):
-                return partido
-        return None
-
-
+DATE_FORMAT = '%x %X'
 cache_noticias = []
-cache_partidos: list[Partido] = []
+cache_partidos = []
+reload_partidos = False
 
+def build_noticia(title, description, url) -> dict:
+    return {
+        'title' : title,
+        'description' : description,
+        'url' : url,
+    }
 
-def build_noticias(soups: list[BeautifulSoup]) -> list[Noticia]:
+def build_noticias(soups: list[BeautifulSoup]) -> list[dict]:
     result = []
     for s in soups:
         title = s.a.string
         description = s.p.string
         url = RIVER_URL + s.a['href']
-        result.append(Noticia(title, description, url))
+        result.append(build_noticia(title, description, url))
     return result
 
-def build_partidos(soups: list[BeautifulSoup]) -> list[Partido]:
+def find_entradas(vs: str, date: datetime) -> None | dict:
+    noticias = get_noticias(6)
+    for noticia in noticias:
+        title = noticia['title'].lower()
+        date_noticia = get_date(noticia['description'])
+        if ('venta de entradas' in title) and (vs.lower() in title) and (date.day == date_noticia.day) and (date.month == date_noticia.month):
+            return {
+                'url' : noticia['url']
+            }
+    return None
+
+def build_partido(vs: str, torneo: str, date_string: str) -> dict:
+    date = format_date(date_string)
+    return {
+        'vs' : vs,
+        'torneo' : torneo,
+        'date' : date.strftime(DATE_FORMAT),
+        'entradas' : find_entradas(vs, date)
+    }
+
+def build_partidos(soups: list[BeautifulSoup]) -> list[dict]:
     result = []
     for s in soups:
         soup_partido = s.find('div', class_='d_calendario')
         vs = soup_partido.b.get_text().replace('River Plate', '').replace('vs.', '').strip()
         torneo = soup_partido.p.strong.string
         date = soup_partido.p.get_text().replace(torneo, '').replace('•', '').strip()
-        result.append(Partido(vs, torneo, date))
+        result.append(build_partido(vs, torneo, date))
     return result
 
-def scrap_noticias():
+def scrap_noticias() -> list[BeautifulSoup]:
+    print('Obteniendo noticias de entradas...')
     info = requests.get(RIVER_URL+'noticias-de-entradas')
     soup = BeautifulSoup(info.content, 'html.parser')
     global cache_noticias
@@ -80,33 +65,55 @@ def scrap_noticias():
         soup_rows = soup.find('section', id='principal').find_all('div', class_='row')[1:]
         first_row = soup_rows[0].find_all('figure')
         if len(cache_noticias) and first_row[0] == cache_noticias[0]:
+            print('No hay nuevas noticias')
             return cache_noticias
+        print('Nuevas noticias detectadas')
         second_row_columns = soup_rows[1].find_all('div', class_='col-lg-6 col-md-6 col-xs-12')
         second_row = merge_lists(second_row_columns[0].find_all('figure'), second_row_columns[1].find_all('figure')) 
         cache_noticias = first_row + second_row
+        global reload_partidos
+        reload_partidos = True
     except Exception as e:
         print(e)
     return cache_noticias
 
-def scrap_partidos():
+def scrap_partidos() -> list[BeautifulSoup] | None:
     info = requests.get(RIVER_URL+'calendario-de-partidos')
     soup = BeautifulSoup(info.content, 'html.parser')
     try:
         return soup.find('div', id='caledario').find('div', class_='calendario').find_all('li')
     except Exception as e:
         print(e)
+    return None
 
-def get_noticias(number: int = 10) -> list[Noticia]:
+def retrieve_noticias():
     noticias = scrap_noticias()
+    if reload_partidos:
+        retrieve_partidos()
+    return noticias
+
+def get_noticias(number: int = 10) -> list[dict]:
+    noticias = retrieve_noticias()
     return build_noticias(noticias[:number])
 
-def get_partidos(number: int = 30) -> list[Partido]:
+def retrieve_partidos() -> list[dict]:
+    print('Obteniendo partidos según calendario...')
     partidos = scrap_partidos()
-    global cache_partidos
-    cache_partidos = build_partidos(partidos[:number])
+    if partidos:
+        global cache_partidos
+        cache_partidos = build_partidos(partidos)
+    global reload_partidos
+    reload_partidos = False
+    return cache_partidos
+
+def get_partidos(number: int = 30)  -> list[dict]:
+    schedule.run_pending
     return cache_partidos
 
 if __name__ == '__main__':
     noticias = get_noticias(10)
     for noticia in noticias:
         print(noticia)
+else:
+    scrap_noticias()
+    schedule.every(15).seconds.do(retrieve_partidos)

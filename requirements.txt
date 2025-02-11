@@ -1,3 +1,4 @@
 requests
 beautifulsoup4 >= 4.13.3
+schedule
 flask >= 3.1.0
