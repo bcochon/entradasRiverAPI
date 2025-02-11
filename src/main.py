@@ -4,7 +4,7 @@ app = Flask('entradasRiver')
 
 @app.route('/')
 def api_root():
-    return 'Welcome'
+    return ''
 
 @app.route('/anuncios')
 def api_announcements():

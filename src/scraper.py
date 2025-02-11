@@ -1,8 +1,13 @@
 import requests
 import schedule
+import logging
+import logging.config
 from bs4 import BeautifulSoup
 from datetime import datetime
 from utils import merge_lists, get_date, format_date
+
+logging.config.fileConfig('../log.conf')
+logger = logging.getLogger('RiverScraper')
 
 RIVER_URL = 'https://www.cariverplate.com.ar/'
 DATE_FORMAT = '%x %X'
@@ -27,7 +32,7 @@ def build_noticias(soups: list[BeautifulSoup]) -> list[dict]:
     return result
 
 def find_entradas(vs: str, date: datetime) -> None | dict:
-    noticias = get_noticias(6)
+    noticias = build_noticias(cache_noticias[:6])
     for noticia in noticias:
         title = noticia['title'].lower()
         date_noticia = get_date(noticia['description'])
@@ -57,24 +62,25 @@ def build_partidos(soups: list[BeautifulSoup]) -> list[dict]:
     return result
 
 def scrap_noticias() -> list[BeautifulSoup]:
-    print('Obteniendo noticias de entradas...')
+    logger.info('Obteniendo noticias de entradas...')
     info = requests.get(RIVER_URL+'noticias-de-entradas')
     soup = BeautifulSoup(info.content, 'html.parser')
     global cache_noticias
+    global reload_partidos
     try:
         soup_rows = soup.find('section', id='principal').find_all('div', class_='row')[1:]
         first_row = soup_rows[0].find_all('figure')
         if len(cache_noticias) and first_row[0] == cache_noticias[0]:
-            print('No hay nuevas noticias')
+            logger.info('No hay nuevas noticias')
+            reload_partidos = False
             return cache_noticias
-        print('Nuevas noticias detectadas')
+        logger.info('Nuevas noticias detectadas')
         second_row_columns = soup_rows[1].find_all('div', class_='col-lg-6 col-md-6 col-xs-12')
         second_row = merge_lists(second_row_columns[0].find_all('figure'), second_row_columns[1].find_all('figure')) 
         cache_noticias = first_row + second_row
-        global reload_partidos
         reload_partidos = True
     except Exception as e:
-        print(e)
+        logger.error(e)
     return cache_noticias
 
 def scrap_partidos() -> list[BeautifulSoup] | None:
@@ -83,7 +89,7 @@ def scrap_partidos() -> list[BeautifulSoup] | None:
     try:
         return soup.find('div', id='caledario').find('div', class_='calendario').find_all('li')
     except Exception as e:
-        print(e)
+        logger.error(e)
     return None
 
 def retrieve_noticias():
@@ -97,7 +103,7 @@ def get_noticias(number: int = 10) -> list[dict]:
     return build_noticias(noticias[:number])
 
 def retrieve_partidos() -> list[dict]:
-    print('Obteniendo partidos según calendario...')
+    logger.info('Obteniendo partidos según calendario...')
     partidos = scrap_partidos()
     if partidos:
         global cache_partidos
@@ -115,5 +121,5 @@ if __name__ == '__main__':
     for noticia in noticias:
         print(noticia)
 else:
-    scrap_noticias()
+    retrieve_noticias()
     schedule.every(2).hours.do(retrieve_partidos)
