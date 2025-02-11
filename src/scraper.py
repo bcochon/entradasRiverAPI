@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from utils import merge_lists, get_date, format_date
 
-logging.config.fileConfig('../log.conf')
+logging.config.fileConfig('log.conf')
 logger = logging.getLogger('RiverScraper')
 
 RIVER_URL = 'https://www.cariverplate.com.ar/'
