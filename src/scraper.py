@@ -14,17 +14,19 @@ class Entradas:
         return None
 
 class Partido:
-    def __init__(self, vs: str, torneo: str, date: str, entradas: Entradas = None):
+    def __init__(self, vs: str, torneo: str, date: str):
         self.vs = vs
         self.torneo = torneo
         self.date = format_date(date)
-        self.entradas = entradas
 
     def __str__(self):
         return f'{self.date.strftime('%c')} - {self.vs} ({self.torneo})'
 
     def coincide(self, title: str, date: datetime):
         return self.vs.lower() in title.lower() and self.date.day == date.day and self.date.month == date.month
+    
+    def set_entradas(self, noticia):
+        self.entradas = Entradas(noticia)
 
 class Noticia:
     def __init__(self, title: str, description: str, url: str):
