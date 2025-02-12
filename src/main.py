@@ -1,4 +1,5 @@
-from flask import Flask, request, Response, json
+from flask import Flask, request, json
+from waitress import serve
 from scraper import get_noticias, get_partidos
 app = Flask('entradasRiver')
 
@@ -23,4 +24,4 @@ def api_matches():
     return json.dumps(partidos)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=3000)
+    serve(app, host="0.0.0.0", port=8080)
