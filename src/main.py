@@ -1,6 +1,9 @@
+import os
 from flask import Flask, request, json
 from waitress import serve
 from scraper import get_noticias, get_partidos
+
+PORT = os.getenv('PORT', 4000)
 app = Flask('entradasRiver')
 
 @app.route('/')
@@ -24,4 +27,4 @@ def api_matches():
     return json.dumps(partidos)
 
 if __name__ == '__main__':
-    serve(app, port=8080)
+    serve(app, port=PORT)
